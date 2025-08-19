@@ -16,9 +16,10 @@ public class HttpServerTest {
 
     @Test
     public void testBuscarEstudiantePorNombre() throws IOException {
-        String buscarUrl = "http://localhost:8080/buscar?q=Laura&matriculado=false";
+        // Usamos Santiago Silva que ya existe en la lista inicial
+        String buscarUrl = "http://localhost:8080/buscar?q=Santiago&matriculado=false";
         String response = sendGetRequest(buscarUrl);
-        assertTrue(response.contains("Laura Gomez"));
+        assertTrue(response.contains("Santiago Silva"));
     }
 
     @Test
