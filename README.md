@@ -1,6 +1,6 @@
-# Taller 1 - Servidor HTTP para Gestión de Estudiantes Universitarios 🏛️
+# Taller 1 - Servidor HTTP para Gestión de Estudiantes
 
-Un servidor HTTP ligero desarrollado en Java que permite registrar y consultar estudiantes de una universidad.
+Un servidor HTTP ligero desarrollado en Java que permite registrar y consultar estudiantes de la universidad.
 
 ## Características principales
 
@@ -60,7 +60,7 @@ Para consumir la API y verificar registros hechos anteriormente o para hacer nue
 
 Hice dos busquedas, para verificar el GET con usuarios que habia creado previamente ("Juan" y "Santiago") y vemos que la respuesta de la peticion es correcta. 
 
-![GET](src/main/images/get.png)
+![GET](src/main/images/GET.png)
 
 Por otro lado, use el siguiente comando que es para hacer una peticion POST desde Powershell: 
 
