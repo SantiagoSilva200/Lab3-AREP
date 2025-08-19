@@ -19,7 +19,7 @@ git clone https://github.com/SantiagoSilva200/Taller1AREP
 cd Taller1AREP
 
 # 3. Compila el proyecto
-mvn clean install
+mvn clean compile
 
 # 4. Ejecuta el servidor
 mvn exec:java -Dexec.mainClass="co.edu.eci.arep.HttpServer"
