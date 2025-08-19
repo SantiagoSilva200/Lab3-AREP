@@ -52,7 +52,7 @@ mvn test
 
 ```
 
-![Test](src/main/images/Test.png)
+![Test](src/main/images/test.png)
 
 ## Pruebas GET y POST
 
