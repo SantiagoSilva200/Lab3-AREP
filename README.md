@@ -1,47 +1,61 @@
-# Taller 1 - Servidor HTTP para Gestión de Estudiantes
+## Microframework Web para Servicios REST
 
-Un servidor HTTP ligero desarrollado en Java que permite registrar y consultar estudiantes de la universidad.
+Este microframework web desarrollado en Java transforma un servidor HTTP básico en un framework completo para aplicaciones web con servicios REST. Permite definir endpoints mediante funciones lambda, manejar parámetros de consulta y servir archivos estáticos de manera eficiente.
 
-## Características principales
-
-- El servidor es capaz de leer archivos del disco local y retornar todos los archivos solicitados, incluyendo páginas html, archivos java script, css e imágenes
-- Soporte para HTTP GET y HTTP POST
-- Pruebas unitarias integradas
-
-## 🔧 Instalación y Ejecución
-
+## Instalación y Ejecución
 
 ```
-# 1. Clona el repositorio
+# 1. Clonar el repositorio
 git clone https://github.com/SantiagoSilva200/Taller1AREP
 
-# 2. Navega al directorio del proyecto
-cd Taller1AREP
+# 2. Navegar al directorio del proyecto
+cd Lab2-AREP
 
-# 3. Compila el proyecto
+# 3. Compilar el proyecto
 mvn clean compile
 
 # 4. Ejecuta el servidor
 mvn exec:java -Dexec.mainClass="co.edu.eci.arep.HttpServer"
 
 ```
-
 Una vez ejecutado, abrir: http://localhost:8080
 
 ## Interfaz 
 
-El sistema ofrece una interfaz web intuitiva donde se puede:
+Servidor HTTP desarrollado en Java que funciona como microframework web, permitiendo crear servicios REST de manera sencilla y servir archivos estáticos.
 
-- Registrar nuevos estudiantes (nombre y carrera)
-- Buscar estudiantes existentes
-- Visualizar todos los registros
+![Pantalla principal](src/main/images/incio.jpg)
 
-![Pantalla principal](src/main/images/inicio.png)
+#### Endpoints disponibles
 
+##### 1. GET /App/hello → Retorna "hello world!"
 
-Haremos una prueba de funcionamiento rapidamente, agregue a el estudiante "Danieñ Gomez" del programa de mecatronica y lo registre, y luego, en la busqueda de estudiantes notamos que se creo correctamente. 
+##### 2. GET /App/hello?name=Juan → Retorna "Hello Juan"
 
-![Prueba1](src/main/images/prueba1.png)
+##### 3 .GET /App/pi → Retorna el valor de π (3.141592653589793)
+
+### Prueba funcionamiento endpoints
+
+#### Hello 
+
+![hello](src/main/images/hello.png)
+
+#### Hello "name"
+
+![helloS](src/main/images/helloSantiago.png)
+
+#### Pi
+
+![pi](src/main/images/pi.png)
+
+A continuacion, se muestra que los endopoints responden de manera correcta desde el servidor, sin embargo, usaremos el comando "curl -X GET" para obtener los mismos valores en consola. 
+
+![curl1](src/main/images/curl1.png)
+
+![curl2](src/main/images/curl2.png)
+
+![curl3](src/main/images/curl3.png)
+
 
 ## Pruebas
 
@@ -51,35 +65,24 @@ Ejecuta las pruebas unitarias con:
 mvn test
 
 ```
+![test](src/main/images/test.png)
 
-![Test](src/main/images/test.png)
+## Pruebas automatizadas 
 
-## Pruebas GET y POST
+Realice pruebas automatizadas, generalmente cuando inicia el servidor se ejecutan 3 pruebas automaticamente .
 
-Para consumir la API y verificar registros hechos anteriormente o para hacer nuevos registros, use el comando "curl" desde una nueva terminal para verificar que este funcionando correctamente. 
+![testA](src/main/images/testA.png)
 
-Hice dos busquedas, para verificar el GET con usuarios que habia creado previamente ("Juan" y "Santiago") y vemos que la respuesta de la peticion es correcta. 
+## Tecnologías
 
-![GET](src/main/images/GET.png)
+Java 11 + 
 
-Por otro lado, use el siguiente comando que es para hacer una peticion POST desde Powershell: 
+Protocolo HTTP/1.1
 
-![POST](src/main/images/POST.png)
+Maven para gestión de build
 
-Y observamos desde la interfaz que se creo correctamente. 
+JUnit para pruebas unitarias
 
-![POST2](src/main/images/verifi.png)
-
-## Arquitectura del Sistema
-
-El proyecto implementa una arquitectura **cliente-servidor** con las siguientes características clave:
-
-| Componente               | Descripción                                                                 |
-|--------------------------|-----------------------------------------------------------------------------|
-| **Servidor HTTP ligero** | Implementado completamente en Java sin frameworks pesados                  |
-| **Endpoints dinámicos**  | Manejan la lógica de negocio para registro y consulta de estudiantes       |
-| **Servicio estático**    | Sirve páginas HTML, CSS y recursos para la interfaz web                     |
-       
 ## Autor
 
 Taller desarrollado por Santiago Silva Roa 

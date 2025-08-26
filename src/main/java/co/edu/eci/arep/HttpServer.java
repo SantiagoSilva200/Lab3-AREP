@@ -6,10 +6,14 @@ import java.nio.file.*;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.function.BiFunction;
 
 public class HttpServer {
 
     private static final List<Student> estudiantes = new ArrayList<>();
+    private static final Map<String, BiFunction<HttpRequest, HttpResponse, String>> routes = new HashMap<>();
+    private static String staticFilesLocation = "/webroot";
+    private static String appPrefix = "/App";
 
     static {
         estudiantes.add(new Student("Juan", "Pérez", "Ingeniería de Sistemas", true));
@@ -19,9 +23,33 @@ public class HttpServer {
         estudiantes.add(new Student("Carlos", "Martínez", "Derecho", false));
     }
 
+    public static void staticfiles(String location) {
+        staticFilesLocation = location;
+        System.out.println("Static files location set to: " + staticFilesLocation);
+    }
+
+    public static void setAppPrefix(String prefix) {
+        appPrefix = prefix;
+        System.out.println("App prefix set to: " + appPrefix);
+    }
+
+    public static void get(String path, BiFunction<HttpRequest, HttpResponse, String> handler) {
+        String fullPath = appPrefix + path;
+        routes.put(fullPath, handler);
+        System.out.println("Route registered: " + fullPath);
+    }
+
     public static void main(String[] args) throws IOException {
+        staticfiles("/webroot");
+        get("/hello", (req, resp) -> "Hello " + req.getValues("name"));
+        get("/pi", (req, resp) -> {
+            return String.valueOf(Math.PI);
+        });
+
         ServerSocket servidor = new ServerSocket(8080);
         System.out.println("Servidor iniciado en http://localhost:8080");
+        System.out.println("Static files location: " + staticFilesLocation);
+        System.out.println("REST services prefix: " + appPrefix);
 
         while (true) {
             Socket cliente = servidor.accept();
@@ -30,60 +58,68 @@ public class HttpServer {
 
             String linea = entrada.readLine();
             if (linea == null) continue;
-            System.out.println("Petición: " + linea);
 
             String[] partes = linea.split(" ");
             String metodo = partes[0];
-            String recurso = partes[1];
+            String recursoCompleto = partes[1];
 
-            if (recurso.equals("/")) recurso = "/index.html";
-            if (recurso.startsWith("/registrar") && metodo.equals("POST")) {
-                Map<String, String> params = leerQuery(recurso);
-                String nombre = params.getOrDefault("nombre", "");
-                String apellido = params.getOrDefault("apellido", "");
-                String carrera = params.getOrDefault("carrera", "");
-                boolean matriculado = params.getOrDefault("matriculado","true").equalsIgnoreCase("true");
-
-                estudiantes.add(new Student(nombre, apellido, carrera, matriculado));
-
-                String respuesta = "Estudiante registrado: " + nombre + " " + apellido;
-                writeResponse(salida, 200, "text/plain", respuesta.getBytes(StandardCharsets.UTF_8));
-                closeStreams(entrada, salida, cliente);
-                continue;
+            String path = recursoCompleto;
+            String query = null;
+            int queryIndex = recursoCompleto.indexOf('?');
+            if (queryIndex != -1) {
+                path = recursoCompleto.substring(0, queryIndex);
+                query = recursoCompleto.substring(queryIndex + 1);
             }
 
-            if (recurso.startsWith("/buscar")) {
-                Map<String, String> params = leerQuery(recurso);
-                String query = params.getOrDefault("q", "").toLowerCase();
-                boolean soloMatriculados = params.getOrDefault("matriculado", "false").equals("true");
+            HttpRequest request = new HttpRequest(path, query);
+            HttpResponse response = new HttpResponse();
 
-                StringBuilder sb = new StringBuilder();
-                for (Student s : estudiantes) {
-                    if ((s.nombre.toLowerCase().contains(query) || s.apellido.toLowerCase().contains(query)) &&
-                            (!soloMatriculados || s.matriculado)) {
-                        sb.append(s.toString()).append("<br>");
+            if (metodo.equals("GET") && routes.containsKey(path)) {
+                try {
+                    String result = routes.get(path).apply(request, response);
+
+                    if (path.equals("/App/hello") && request.getValues("name").isEmpty()) {
+                        result = "hello world!";
                     }
+
+                    String contentType = response.getContentType();
+                    writeResponse(salida, response.getStatus(), contentType, result.getBytes(StandardCharsets.UTF_8));
+                    closeStreams(entrada, salida, cliente);
+                    continue;
+                } catch (Exception e) {
+                    writeResponse(salida, 500, "text/plain",
+                            "Error interno del servidor".getBytes(StandardCharsets.UTF_8));
+                    closeStreams(entrada, salida, cliente);
+                    continue;
                 }
-
-                writeResponse(salida, 200, "text/html", sb.toString().getBytes(StandardCharsets.UTF_8));
-                closeStreams(entrada, salida, cliente);
-                continue;
             }
 
-            InputStream inputStream = HttpServer.class.getResourceAsStream(recurso);
-            if (inputStream != null) {
-                String mime = guessMime(recurso);
-                String header = "HTTP/1.1 200 OK\r\nContent-Type: " + mime + "\r\n\r\n";
-                salida.write(header.getBytes());
-                inputStream.transferTo(salida);
-                inputStream.close();
-            } else {
-                String respuesta = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r\n<h1>404 - Archivo no encontrado</h1>";
-                salida.write(respuesta.getBytes());
+            if (metodo.equals("GET")) {
+                String staticFilePath = getStaticFilePath(path);
+                InputStream inputStream = HttpServer.class.getResourceAsStream(staticFilePath);
+
+                if (inputStream != null) {
+                    String mime = guessMime(staticFilePath);
+                    String header = "HTTP/1.1 200 OK\r\nContent-Type: " + mime + "\r\n\r\n";
+                    salida.write(header.getBytes());
+                    inputStream.transferTo(salida);
+                    inputStream.close();
+                    closeStreams(entrada, salida, cliente);
+                    continue;
+                }
             }
 
+            String respuesta = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r\n<h1>404 - Recurso no encontrado</h1>";
+            salida.write(respuesta.getBytes());
             closeStreams(entrada, salida, cliente);
         }
+    }
+
+    private static String getStaticFilePath(String requestPath) {
+        if (requestPath.equals("/")) {
+            return staticFilesLocation + "/index.html";
+        }
+        return staticFilesLocation + requestPath;
     }
 
     private static void closeStreams(BufferedReader entrada, OutputStream salida, Socket cliente) throws IOException {
@@ -92,31 +128,23 @@ public class HttpServer {
         cliente.close();
     }
 
-    private static Map<String, String> leerQuery(String recurso) {
-        Map<String, String> map = new HashMap<>();
-        int q = recurso.indexOf('?');
-        if (q < 0) return map;
-        String query = recurso.substring(q + 1);
-        for (String param : query.split("&")) {
-            String[] kv = param.split("=");
-            if (kv.length == 2) {
-                map.put(kv[0], URLDecoder.decode(kv[1], StandardCharsets.UTF_8));
-            }
-        }
-        return map;
-    }
-
     private static String guessMime(String path) {
         path = path.toLowerCase();
         if (path.endsWith(".html")) return "text/html; charset=utf-8";
         if (path.endsWith(".css")) return "text/css; charset=utf-8";
         if (path.endsWith(".js")) return "application/javascript; charset=utf-8";
         if (path.endsWith(".png")) return "image/png";
+        if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
+        if (path.endsWith(".gif")) return "image/gif";
+        if (path.endsWith(".ico")) return "image/x-icon";
+        if (path.endsWith(".json")) return "application/json; charset=utf-8";
+        if (path.endsWith(".txt")) return "text/plain; charset=utf-8";
         return "application/octet-stream";
     }
 
     private static void writeResponse(OutputStream out, int status, String contentType, byte[] body) throws IOException {
-        String header = "HTTP/1.1 " + status + " OK\r\nContent-Type: " + contentType + "\r\n\r\n";
+        String statusText = (status == 200) ? "OK" : "Error";
+        String header = "HTTP/1.1 " + status + " " + statusText + "\r\nContent-Type: " + contentType + "\r\n\r\n";
         out.write(header.getBytes());
         out.write(body);
     }

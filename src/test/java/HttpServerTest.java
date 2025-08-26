@@ -1,61 +1,78 @@
-
-import org.junit.Before;
-import org.junit.Test;
-import static org.junit.Assert.*;
-import java.io.*;
-import java.net.*;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+import co.edu.eci.arep.HttpServer;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 
 public class HttpServerTest {
 
-    @Test
-    public void testRegistrarEstudiante() throws IOException {
-        String registrarUrl = "http://localhost:8080/registrar?nombre=Laura&apellido=Gomez&carrera=Matematicas&matriculado=true";
-        String response = sendPostRequest(registrarUrl);
-        assertTrue(response.contains("Estudiante registrado: Laura Gomez"));
+    private static Thread serverThread;
+    private static final HttpClient httpClient = HttpClient.newHttpClient();
+    private static final String BASE_URL = "http://localhost:8080";
+
+    @BeforeAll
+    public static void startServer() throws Exception {
+        serverThread = new Thread(() -> {
+            try {
+                String[] args = {};
+                HttpServer.main(args);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+        serverThread.setDaemon(true);
+        serverThread.start();
+        Thread.sleep(3000);
+    }
+
+    @AfterAll
+    public static void stopServer() {
     }
 
     @Test
-    public void testBuscarEstudiantePorNombre() throws IOException {
-        // Usamos Santiago Silva que ya existe en la lista inicial
-        String buscarUrl = "http://localhost:8080/buscar?q=Santiago&matriculado=false";
-        String response = sendGetRequest(buscarUrl);
-        assertTrue(response.contains("Santiago Silva"));
+    public void testHello() throws Exception {
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/App/hello"))
+                .GET()
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(200, response.statusCode());
+        assertEquals("hello world!", response.body().trim());
+        System.out.println("/App/hello: " + response.body().trim());
     }
 
     @Test
-    public void testBuscarSoloMatriculados() throws IOException {
-        String buscarMatUrl = "http://localhost:8080/buscar?q=&matriculado=true";
-        String response = sendGetRequest(buscarMatUrl);
-        assertTrue(response.contains("Sí"));
+    public void testHelloWParameters() throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/App/hello?name=Pedro"))
+                .GET()
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        assertEquals(200, response.statusCode());
+        assertEquals("Hello Pedro", response.body().trim());
+        System.out.println("/App/hello?name=Pedro: " + response.body().trim());
     }
 
-    private static String sendGetRequest(String urlStr) throws IOException {
-        URL url = new URL(urlStr);
-        HttpURLConnection con = (HttpURLConnection) url.openConnection();
-        con.setRequestMethod("GET");
+    @Test
+    public void testPi() throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BASE_URL + "/App/pi"))
+                .GET()
+                .build();
 
-        BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-        String inputLine;
-        StringBuilder response = new StringBuilder();
-        while ((inputLine = in.readLine()) != null) {
-            response.append(inputLine);
-        }
-        in.close();
-        return response.toString();
-    }
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-    private static String sendPostRequest(String urlStr) throws IOException {
-        URL url = new URL(urlStr);
-        HttpURLConnection con = (HttpURLConnection) url.openConnection();
-        con.setRequestMethod("POST");
-
-        BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-        String inputLine;
-        StringBuilder response = new StringBuilder();
-        while ((inputLine = in.readLine()) != null) {
-            response.append(inputLine);
-        }
-        in.close();
-        return response.toString();
+        assertEquals(200, response.statusCode());
+        assertEquals(String.valueOf(Math.PI), response.body().trim());
+        System.out.println("/App/pi: " + response.body().trim());
     }
 }
