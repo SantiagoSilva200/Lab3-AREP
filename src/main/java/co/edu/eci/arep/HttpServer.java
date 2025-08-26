@@ -1,151 +1,272 @@
+/*
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
+ */
 package co.edu.eci.arep;
 
-import java.io.*;
 import java.net.*;
-import java.nio.file.*;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.function.BiFunction;
+import java.io.*;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
+/**
+ * A lightweight HTTP server that provides web framework functionality.
+ * This class implements a web server that can handle REST services, static file serving,
+ * and provides a simple API for registering service endpoints.
+ * @author daniel.aldana-b
+ */
 public class HttpServer {
+    //Map containing registered REST services mapped by their paths
+    public static Map<String, Method> services = new HashMap();
+    // Root directory for serving static files
+    public static String ROOT_DIRECTORY = "target/classes";
 
-    private static final List<Student> estudiantes = new ArrayList<>();
-    private static final Map<String, BiFunction<HttpRequest, HttpResponse, String>> routes = new HashMap<>();
-    private static String staticFilesLocation = "/webroot";
-    private static String appPrefix = "/App";
-
-    static {
-        estudiantes.add(new Student("Juan", "Pérez", "Ingeniería de Sistemas", true));
-        estudiantes.add(new Student("Ana", "Gómez", "Medicina", false));
-        estudiantes.add(new Student("Santiago", "Silva", "Ingeniería de Sistemas", true));
-        estudiantes.add(new Student("María", "López", "Arquitectura", true));
-        estudiantes.add(new Student("Carlos", "Martínez", "Derecho", false));
-    }
-
-    public static void staticfiles(String location) {
-        staticFilesLocation = location;
-        System.out.println("Static files location set to: " + staticFilesLocation);
-    }
-
-    public static void setAppPrefix(String prefix) {
-        appPrefix = prefix;
-        System.out.println("App prefix set to: " + appPrefix);
-    }
-
-    public static void get(String path, BiFunction<HttpRequest, HttpResponse, String> handler) {
-        String fullPath = appPrefix + path;
-        routes.put(fullPath, handler);
-        System.out.println("Route registered: " + fullPath);
-    }
-
-    public static void main(String[] args) throws IOException {
-        staticfiles("/webroot");
-        get("/hello", (req, resp) -> "Hello " + req.getValues("name"));
-        get("/pi", (req, resp) -> {
-            return String.valueOf(Math.PI);
-        });
-
-        ServerSocket servidor = new ServerSocket(8080);
-        System.out.println("Servidor iniciado en http://localhost:8080");
-        System.out.println("Static files location: " + staticFilesLocation);
-        System.out.println("REST services prefix: " + appPrefix);
-
-        while (true) {
-            Socket cliente = servidor.accept();
-            BufferedReader entrada = new BufferedReader(new InputStreamReader(cliente.getInputStream()));
-            OutputStream salida = cliente.getOutputStream();
-
-            String linea = entrada.readLine();
-            if (linea == null) continue;
-
-            String[] partes = linea.split(" ");
-            String metodo = partes[0];
-            String recursoCompleto = partes[1];
-
-            String path = recursoCompleto;
-            String query = null;
-            int queryIndex = recursoCompleto.indexOf('?');
-            if (queryIndex != -1) {
-                path = recursoCompleto.substring(0, queryIndex);
-                query = recursoCompleto.substring(queryIndex + 1);
+    /**
+     * Starts the HTTP server and begins listening for incoming connections.
+     * The server runs continuously, accepting client connections and handling
+     * HTTP requests until manually stopped.
+     *
+     * @param args command line arguments (not used)
+     * @throws IOException if an I/O error occurs during server operation
+     * @throws URISyntaxException if there's an error parsing request URIs
+     */
+    public static void runServer(String[] args) throws IOException, URISyntaxException {
+        loadComponents(args);
+        ServerSocket serverSocket = null;
+        try {
+            serverSocket = new ServerSocket(35000);
+        } catch (IOException e) {
+            System.err.println("Could not listen on port: 35000.");
+            System.exit(1);
+        }
+        Socket clientSocket = null;
+        boolean running = true;
+        while (running) {
+            try {
+                System.out.println("Listo para recibir ...");
+                clientSocket = serverSocket.accept();
+            } catch (IOException e) {
+                System.err.println("Accept failed.");
+                System.exit(1);
             }
+            PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
+            BufferedReader in = new BufferedReader(
+                    new InputStreamReader(
+                            clientSocket.getInputStream()));
+            String inputLine, outputLine;
+            String path = null;
+            boolean firstLine = true;
+            URI requri = null;
+            while ((inputLine = in.readLine()) != null) {
+                if (firstLine) {
+                    requri = new URI(inputLine.split(" ")[1]);
+                    System.out.println("Path: " + requri.getPath());
+                    firstLine = false;
+                }
+                System.out.println("Received: " + inputLine);
+                if (!in.ready()) {
+                    break;
+                }
+            }
+            handleRequest(requri, out, clientSocket);
+            //out.println(outputLine);
+            out.close();
+            in.close();
+            clientSocket.close();
+        }
+        serverSocket.close();
+    }
 
-            HttpRequest request = new HttpRequest(path, query);
-            HttpResponse response = new HttpResponse();
+    /**
+     * Handles an incoming HTTP request and generates the appropriate response.
+     * This method routes requests to the appropriate handler based on the URI path:
+     * @param uri    the request URI containing the path and query parameters
+     * @param out    the writer to send responses to the client
+     * @param socket the client socket used for file streaming
+     * @throws IOException if an I/O error occurs when handling the request
+     */
+    public static void handleRequest(URI uri, PrintWriter out, Socket socket) throws IOException {
 
-            if (metodo.equals("GET") && routes.containsKey(path)) {
-                try {
-                    String result = routes.get(path).apply(request, response);
+        if(uri != null && uri.getPath().startsWith("/app/helloget")){
+            String output = greetingService(uri, false);
+            invokeService(uri);
+            out.println(output);
+        }else if(uri != null && uri.getPath().startsWith("/app/hellopost")) {
+            String output = greetingService(uri, true);
+            out.println(output);
+        }
+        // Check for registered REST services
+        else if(uri != null && services.containsKey(uri.getPath())) {
+            String output = invokeService(uri);
+            out.println(output);
+        }
+        else{
+            // Handle static files
+            Path directory = Path.of(ROOT_DIRECTORY, uri.getPath());
+            if(Files.isDirectory(directory)){
+                directory = directory.resolve("index.html");
+            }
+            if(Files.exists(directory)){
+                String output = "HTTP/1.1 200 OK\r\n" + "content-type: " + getType(directory) + "\r\n"
+                        +"content-length: " + Files.size(directory) + "\r\n\r\n";
+                try (OutputStream outputStream = socket.getOutputStream()) {
+                    outputStream.write(output.getBytes());
+                    Files.copy(directory, outputStream);
+                }
+            } else {
+                String outputLine = "HTTP/1.1 404 Not Found\r\n"  + "content-type: text/plain; charset=utf-8\r\n"
+                        + "\r\n" + "File not found";
+                out.println(outputLine);
+            }
+        }
 
-                    if (path.equals("/App/hello") && request.getValues("name").isEmpty()) {
-                        result = "hello world!";
+    }
+
+    /**
+     * Determines the MIME type of a given file based on its extension.
+     * Supports common web file types including HTML, CSS, JavaScript, images, and JSON.
+     *
+     * @param path the file path whose content type is to be determined
+     * @return the MIME type as a string (e.g., "text/html"), or "application/octet-stream" if unknown
+     */
+    public static String getType(Path path){
+        if (path == null || path.getFileName() == null) {
+            return "application/octet-stream";
+        }
+
+        String fileName = path.getFileName().toString();
+        int dotIndex = fileName.lastIndexOf('.');
+        if (dotIndex < 0) {
+            return "application/octet-stream";
+        }
+
+        String extension = fileName.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
+
+        return switch (extension) {
+            case "html", "htm" -> "text/html; charset=utf-8";
+            case "css" -> "text/css; charset=utf-8";
+            case "js" -> "application/javascript; charset=utf-8";
+            case "json" -> "application/json; charset=utf-8";
+            case "png" -> "image/png";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "gif" -> "image/gif";
+            case "svg" -> "image/svg+xml";
+            case "ico" -> "image/x-icon";
+            default -> "application/octet-stream";
+        };
+    }
+
+    /**
+     * Generates an HTTP response with a JSON greeting message.
+     * This is a legacy service method that creates a JSON response with a greeting
+     * and optionally includes the current date.
+     *
+     * @param uri  the request URI containing the query parameter (?name=value)
+     * @param time if true, includes the current date in the response
+     * @return an HTTP response string with status, headers, and JSON body
+     */
+    public static String greetingService(URI uri, boolean time){
+        String user;
+        try{
+            user = uri.getQuery().split("=")[1];
+        } catch (Exception e) {
+            return "HTTP/1.1 400 Bad Request\r\n" + "content-type: text/plain; charset=utf-8\r\n"
+                    + "\r\n" + "{\"msg\": \"Name not found\"}";
+        }
+        String response = "HTTP/1.1 200 OK \r\n" + "content-type: application/json; charset=utf-8\r\n"
+                + "\r\n";
+        response = response + "{\"msg\": \"Hello " + user;
+        response = time? response + "today's date is" + LocalDate.now() + "\"}":response+ "\"}";
+        System.out.println(response);
+        return response;
+    }
+
+    /**
+     * Registers a REST service endpoint with the specified path.
+     * The service will be invoked when a request is made to the specified path.
+     *
+     * @param path the URL path for the service (e.g., "/hello", "/api/users")
+     * @param s the service implementation to handle requests to this path
+     */
+    public static void get(String path, Method s){
+        services.put(path,s);
+    }
+
+    /**
+     * Sets the root directory for serving static files.
+     * The directory path is relative to the target/classes directory.
+     *
+     * @param localFilesPath the path to the static files directory
+     */
+    public static void staticfiles(String localFilesPath){
+        ROOT_DIRECTORY = "target/classes" + localFilesPath;
+    }
+
+    /**
+     * Starts the HTTP server.
+     * This is a convenience method that calls runServer().
+     *
+     * @param args command line arguments passed to runServer()
+     * @throws IOException if an I/O error occurs during server operation
+     * @throws URISyntaxException if there's an error parsing request URIs
+     */
+    public static void start(String[] args) throws IOException, URISyntaxException{
+        runServer(args);
+    }
+
+    /**
+     * Invokes a registered REST service for the given URI.
+     * Creates HttpRequest and HttpResponse objects and passes them to the service.
+     * Returns a properly formatted HTTP response string.
+     *
+     * @param uri the request URI containing the path and query parameters
+     * @return a complete HTTP response string with headers and body, or a 404 error if service not found
+     */
+    public static String invokeService(URI uri){
+        String key = uri.getPath();
+        System.out.println("hola" + " : " + key);
+        Method s = services.get(key);
+
+        if (s != null) {
+            HttpRequest req = new HttpRequest(uri);
+            HttpResponse res = new HttpResponse();
+            try {
+                //String serviceResponse = s.invoke(req, res);
+                return "HTTP/1.1 " + res.getStatusCode() + " " + res.getStatusMessage() + "\r\n"
+                        + "content-type: " + res.getContentType() + "\r\n"
+                        + "\r\n" + s.invoke(null);
+            } catch (IllegalAccessException ex) {
+                Logger.getLogger(HttpServer.class.getName()).log(Level.SEVERE, null, ex);
+            } catch (InvocationTargetException ex) {
+                Logger.getLogger(HttpServer.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+        return "HTTP/1.1 404 Not Found\r\n" + "content-type: text/plain; charset=utf-8\r\n"
+                + "\r\n" + "Service not found";
+    }
+
+    private static void loadComponents(String[] args) {
+        try {
+            Class c = Class.forName(args[0]);
+            if(c.isAnnotationPresent(RestController.class)){
+                Method[] methods = c.getDeclaredMethods();
+                for(Method m:methods){
+                    if(m.isAnnotationPresent(GetMapping.class)){
+                        String mapping = m.getAnnotation(GetMapping.class).value();
+                        services.put(mapping, m);
                     }
-
-                    String contentType = response.getContentType();
-                    writeResponse(salida, response.getStatus(), contentType, result.getBytes(StandardCharsets.UTF_8));
-                    closeStreams(entrada, salida, cliente);
-                    continue;
-                } catch (Exception e) {
-                    writeResponse(salida, 500, "text/plain",
-                            "Error interno del servidor".getBytes(StandardCharsets.UTF_8));
-                    closeStreams(entrada, salida, cliente);
-                    continue;
                 }
             }
-
-            if (metodo.equals("GET")) {
-                String staticFilePath = getStaticFilePath(path);
-                InputStream inputStream = HttpServer.class.getResourceAsStream(staticFilePath);
-
-                if (inputStream != null) {
-                    String mime = guessMime(staticFilePath);
-                    String header = "HTTP/1.1 200 OK\r\nContent-Type: " + mime + "\r\n\r\n";
-                    salida.write(header.getBytes());
-                    inputStream.transferTo(salida);
-                    inputStream.close();
-                    closeStreams(entrada, salida, cliente);
-                    continue;
-                }
-            }
-
-            String respuesta = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r\n<h1>404 - Recurso no encontrado</h1>";
-            salida.write(respuesta.getBytes());
-            closeStreams(entrada, salida, cliente);
+        } catch (ClassNotFoundException ex) {
+            Logger.getLogger(HttpServer.class.getName()).log(Level.SEVERE, null, ex);
         }
-    }
-
-    private static String getStaticFilePath(String requestPath) {
-        if (requestPath.equals("/")) {
-            return staticFilesLocation + "/index.html";
-        }
-        return staticFilesLocation + requestPath;
-    }
-
-    private static void closeStreams(BufferedReader entrada, OutputStream salida, Socket cliente) throws IOException {
-        salida.close();
-        entrada.close();
-        cliente.close();
-    }
-
-    private static String guessMime(String path) {
-        path = path.toLowerCase();
-        if (path.endsWith(".html")) return "text/html; charset=utf-8";
-        if (path.endsWith(".css")) return "text/css; charset=utf-8";
-        if (path.endsWith(".js")) return "application/javascript; charset=utf-8";
-        if (path.endsWith(".png")) return "image/png";
-        if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
-        if (path.endsWith(".gif")) return "image/gif";
-        if (path.endsWith(".ico")) return "image/x-icon";
-        if (path.endsWith(".json")) return "application/json; charset=utf-8";
-        if (path.endsWith(".txt")) return "text/plain; charset=utf-8";
-        return "application/octet-stream";
-    }
-
-    private static void writeResponse(OutputStream out, int status, String contentType, byte[] body) throws IOException {
-        String statusText = (status == 200) ? "OK" : "Error";
-        String header = "HTTP/1.1 " + status + " " + statusText + "\r\nContent-Type: " + contentType + "\r\n\r\n";
-        out.write(header.getBytes());
-        out.write(body);
     }
 }
