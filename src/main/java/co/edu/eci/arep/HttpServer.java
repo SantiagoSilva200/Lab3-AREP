@@ -8,7 +8,7 @@ import java.util.function.BiFunction;
 
 public class HttpServer {
 
-    private static final Map<String, BiFunction<HttpRequest, HttpResponse, String>> routes = new HashMap<>();
+    public static final Map<String, BiFunction<HttpRequest, HttpResponse, String>> routes = new HashMap<>();
     private static String staticFilesLocation;
 
     public static void staticfiles(String location) {
