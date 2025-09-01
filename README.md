@@ -63,7 +63,7 @@ Retorna "Greetings from Spring Boot!"
 
 ##### Servidor 
 
-![1](src/main/images/1.JPG)
+![1](src/main/images/1.png)
 
 ##### Usando Curl 
 
